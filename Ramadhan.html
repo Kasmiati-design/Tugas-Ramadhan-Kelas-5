@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tugas Ramadhan - SDN 002 Sangatta Utara</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root { --primary: #1b5e20; --accent: #2e7d32; --danger: #c62828; --bg: #f0f4f0; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; padding: 10px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); position: relative; }
+        .hidden { display: none; }
+        
+        /* Admin Button */
+        .admin-btn { position: absolute; top: 10px; right: 10px; padding: 5px 10px; font-size: 12px; background: #eee; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+
+        /* Quiz Layout */
+        .quiz-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 2px solid #eee; margin-bottom: 20px; }
+        .timer { font-size: 24px; font-weight: bold; color: var(--danger); background: #ffebee; padding: 5px 15px; border-radius: 8px; }
+        .main-quiz { display: grid; grid-template-columns: 1fr 280px; gap: 20px; }
+        @media (max-width: 768px) { .main-quiz { grid-template-columns: 1fr; } }
+        
+        /* Soal */
+        .narasi { background: #fff9c4; padding: 15px; border-radius: 8px; border-left: 5px solid #fbc02d; margin-bottom: 15px; font-style: italic; line-height: 1.6; font-size: 0.95rem; }
+        .option-item { display: block; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .option-item:hover { background: #f1f8e9; }
+        textarea { width: 100%; height: 80px; padding: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 16px; }
+
+        /* Navigasi */
+        .nav-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; max-height: 300px; overflow-y: auto; padding: 5px; }
+        .nav-btn { aspect-ratio: 1; border: none; border-radius: 5px; cursor: pointer; background: var(--danger); color: white; font-weight: bold; }
+        .nav-btn.answered { background: var(--primary); }
+        .nav-btn.active { outline: 3px solid #2196f3; box-shadow: 0 0 10px rgba(33,150,243,0.5); }
+
+        .btn { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; }
+        .btn-start { background: var(--primary); width: 100%; font-size: 18px; }
+        .btn-finish { background: #0d47a1; width: 100%; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <button class="admin-btn" onclick="aksesAdmin()">Admin</button>
+
+    <div id="screen-login" style="text-align:center; max-width: 400px; margin: auto; padding: 50px 0;">
+        <h2 style="color: var(--primary);">🌙 Tugas Ramadhan</h2>
+        <p>SDN 002 Sangatta Utara - Kelas 5</p>
+        <input type="text" id="nama" placeholder="Nama Lengkap Siswa" style="width:100%; padding:12px; margin:10px 0; border:1px solid #ddd; border-radius:8px;">
+        <input type="text" id="kelas" placeholder="Kelas (Contoh: 5A)" style="width:100%; padding:12px; margin:10px 0; border:1px solid #ddd; border-radius:8px;">
+        <button class="btn btn-start" onclick="mulaiUjian()">Mulai Mengerjakan</button>
+    </div>
+
+    <div id="screen-quiz" class="hidden">
+        <div class="quiz-header">
+            <div><b id="info-nama"></b> | <span id="info-kelas"></span></div>
+            <div class="timer" id="timer">60:00</div>
+        </div>
+        <div class="main-quiz">
+            <div id="question-container">
+                <div id="q-content"></div>
+                <div style="margin-top:20px; display:flex; justify-content: space-between;">
+                    <button class="btn" style="background:#888" onclick="ubahSoal(-1)">⬅️ Sebelumnya</button>
+                    <button class="btn" style="background:#888" onclick="ubahSoal(1)">Selanjutnya ➡️</button>
+                </div>
+            </div>
+            <div class="nav-panel">
+                <div style="background:#f9f9f9; padding:15px; border-radius:10px; border: 1px solid #ddd;">
+                    <h4 style="margin:0 0 10px 0">Navigasi Soal</h4>
+                    <div id="nav-grid" class="nav-grid"></div>
+                    <button class="btn btn-finish" onclick="konfirmasiSelesai()">KIRIM JAWABAN</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-result" class="hidden" style="text-align:center; padding: 50px 0;">
+        <h2 id="status-kirim">Mengirim...</h2>
+        <div style="font-size: 70px; font-weight: bold; color: var(--primary);" id="score-val">0</div>
+        <p id="score-det"></p>
+        <button class="btn" style="background: #2e7d32;" onclick="unduhExcel()">Unduh Excel (Cadangan)</button>
+    </div>
+</div>
+
+<script>
+    // 1. MASUKKAN URL GOOGLE APPS SCRIPT ANDA DI SINI
+    const URL_SPREADSHEET = "https://script.google.com/macros/s/AKfycbxrlftLWYk2ufyQeB9H1wUsLnNVtq-yQYnzf6FYMAgVXvO2lKNeXxhGYdc4rXINSRjeEg/exec";
+    // 2. MASUKKAN URL GOOGLE SPREADSHEET (UNTUK TOMBOL ADMIN)
+    const URL_VIEW_SHEET = "https://docs.google.com/spreadsheets/d/1-9wfyVe8BKnuHT06957KyqNG-mC1Un9fg3gVPsTE2lE/edit?usp=sharing";
+
+    let soalData = [
+        { tipe: 'pg', tanya: "Puasa Ramadhan merupakan rukun Islam yang ke...", opsi: ["2", "3", "4", "5"], kunci: 1 },
+        { tipe: 'pg', tanya: "Dalil perintah mewajibkan puasa Ramadhan terdapat dalam Al-Qur'an surah...", opsi: ["Al-Baqarah ayat 183", "Al-Maidah ayat 3", "Al-Baqarah ayat 285", "Ali-Imran ayat 190"], kunci: 0 },
+        { tipe: 'pg', tanya: "Tujuan utama berpuasa menurut QS. Al-Baqarah: 183 adalah agar menjadi orang yang...", opsi: ["Sehat", "Kaya", "Bertaqwa", "Pintar"], kunci: 2 },
+        { tipe: 'pg', tanya: "Penetapan awal bulan Ramadhan oleh pemerintah dilakukan melalui sidang...", opsi: ["Isbat", "Paripurna", "Tahunan", "Kompromi"], kunci: 0 },
+        { tipe: 'pg', tanya: "Syarat wajib puasa bagi seorang muslim adalah 'Baligh', yang artinya...", opsi: ["Sudah mampu bekerja", "Sudah cukup umur/dewasa", "Sudah memiliki harta", "Sudah sekolah"], kunci: 1 },
+        { tipe: 'pg', tanya: "Seseorang yang hilang akal atau gila, maka hukum puasanya adalah...", opsi: ["Sah", "Makruh", "Tidak sah/tidak wajib", "Sunnah"], kunci: 2 },
+        { tipe: 'pg', tanya: "Niat puasa Ramadhan sebaiknya dilakukan pada...", opsi: ["Pagi hari setelah subuh", "Siang hari saat lapar", "Malam hari hingga sebelum fajar", "Sore hari sebelum berbuka"], kunci: 2 },
+        { tipe: 'pg', tanya: "Menahan diri dari hal yang membatalkan puasa dimulai sejak...", opsi: ["Terbit fajar (waktu subuh)", "Matahari terbit", "Pukul 06.00 pagi", "Adzan Dzuhur"], kunci: 0 },
+        { tipe: 'pg', tanya: "Makan dan minum dengan tidak sengaja (lupa) saat puasa hukumnya...", opsi: ["Membatalkan puasa", "Tidak membatalkan puasa", "Harus membayar denda", "Puasanya makruh"], kunci: 1 },
+        { tipe: 'pg', tanya: "Hal yang membatalkan puasa secara sengaja adalah...", opsi: ["Tidur siang", "Keluar keringat", "Muntah dengan disengaja", "Menangis"], kunci: 2 },
+        { tipe: 'pg', tanya: "Shalat sunnah yang hanya ada di malam bulan Ramadhan disebut...", opsi: ["Tahajud", "Witir", "Dhuha", "Tarawih"], kunci: 3 },
+        { tipe: 'pg', tanya: "Bilangan rakaat shalat Tarawih yang umum dilakukan di Indonesia adalah...", opsi: ["2 atau 4 rakaat", "8 atau 20 rakaat", "10 atau 12 rakaat", "5 atau 7 rakaat"], kunci: 1 },
+        { tipe: 'pg', tanya: "Shalat malam yang jumlah rakaatnya ganjil sebagai penutup shalat malam disebut...", opsi: ["Shalat Witir", "Shalat Hajat", "Shalat Istikharah", "Shalat Tasbih"], kunci: 0 },
+        { tipe: 'pg', tanya: "Peristiwa turunnya Al-Qur'an pertama kali disebut...", opsi: ["Lailatul Qadar", "Nuzulul Qur'an", "Isra' Mi'raj", "Maulid Nabi"], kunci: 1 },
+        { tipe: 'pg', tanya: "Al-Qur'an pertama kali diturunkan kepada Nabi Muhammad SAW melalui malaikat...", opsi: ["Mikail", "Israfil", "Jibril", "Izrail"], kunci: 2 },
+        { tipe: 'pg', tanya: "Malam yang kemuliaannya lebih baik dari seribu bulan disebut...", opsi: ["Malam Jumat", "Lailatul Qadar", "Malam Satu Suro", "Malam Nisfu Sya'ban"], kunci: 1 },
+        { tipe: 'pg', tanya: "Lailatul Qadar umumnya terjadi pada malam-malam ganjil di...", opsi: ["10 hari pertama Ramadhan", "10 hari kedua Ramadhan", "10 hari terakhir Ramadhan", "Sepanjang tahun"], kunci: 2 },
+        { tipe: 'pg', tanya: "Berdiam diri di dalam masjid dengan niat ibadah disebut...", opsi: ["Itikaf", "Tadarus", "Tawaf", "Sa'i"], kunci: 0 },
+        { tipe: 'pg', tanya: "Membaca Al-Qur'an secara bersama-sama atau menyimak di bulan Ramadhan disebut...", opsi: ["Sedekah", "Tadarus", "Kultum", "Zakat"], kunci: 1 },
+        { tipe: 'pg', tanya: "Memberikan makanan untuk orang yang berbuka puasa hukumnya...", opsi: ["Wajib", "Sunnah muakkad", "Makruh", "Mubah"], kunci: 1 },
+        { tipe: 'pg', tanya: "Batas waktu makan sahur berakhir ketika masuk waktu...", opsi: ["Imsak/Fajar", "Syuruq", "Terik matahari", "Jam 5 pagi"], kunci: 0 },
+        { tipe: 'pg', tanya: "Menyegerakan berbuka puasa hukumnya...", opsi: ["Wajib", "Haram", "Sunnah", "Makruh"], kunci: 2 },
+        { tipe: 'pg', tanya: "Rasulullah SAW menganjurkan berbuka puasa dengan...", opsi: ["Gorengan", "Kurma atau air putih", "Es buah yang banyak", "Makanan yang sangat pedas"], kunci: 1 },
+        { tipe: 'pg', tanya: "Orang tua yang sudah renta dan tidak mampu berpuasa boleh mengganti puasanya dengan...", opsi: ["Membayar hutang", "Membayar fidyah", "Membayar zakat mal", "Berdiam diri saja"], kunci: 1 },
+        { tipe: 'pg', tanya: "Fidyah diberikan kepada...", opsi: ["Orang kaya", "Saudara kandung", "Fakir miskin", "Pengurus masjid"], kunci: 2 },
+        { tipe: 'pg', tanya: "Orang yang sedang dalam perjalanan jauh dan berat (musafir) boleh tidak berpuasa, namun wajib...", opsi: ["Membayar fidyah", "Menggantinya di hari lain (Qadha)", "Meminta maaf", "Bersedekah saja"], kunci: 1 },
+        { tipe: 'pg', tanya: "Zakat yang wajib dikeluarkan setiap jiwa muslim di akhir Ramadhan adalah...", opsi: ["Zakat Mal", "Zakat Fitrah", "Zakat Perniagaan", "Zakat Emas"], kunci: 1 },
+        { tipe: 'pg', tanya: "Ukuran zakat fitrah jika diukur dengan beras adalah sekitar...", opsi: ["1,5 kg", "2,5 kg atau 3,5 liter", "5 kg", "10 liter"], kunci: 1 },
+        { tipe: 'pg', tanya: "Waktu paling utama membayar zakat fitrah adalah...", opsi: ["Awal bulan Ramadhan", "Pertengahan Ramadhan", "Setelah shalat subuh sebelum shalat Idul Fitri", "Setelah shalat Idul Fitri"], kunci: 2 },
+        { tipe: 'pg', tanya: "Golongan orang yang berhak menerima zakat disebut...", opsi: ["Muzakki", "Mustahik", "Munafik", "Mualaf"], kunci: 1 },
+        { tipe: 'pg', tanya: "Salah satu hikmah puasa bagi kesehatan adalah...", opsi: ["Membuat perut buncit", "Mengistirahatkan organ pencernaan", "Membuat badan lemas", "Meningkatkan kolesterol"], kunci: 1 },
+        { tipe: 'pg', tanya: "Puasa melatih kita untuk merasakan penderitaan orang yang kelaparan, hal ini menumbuhkan rasa...", opsi: ["Sombong", "Dendam", "Empati dan peduli", "Pelit"], kunci: 2 },
+        { tipe: 'pg', tanya: "Menahan amarah dan tidak berkata kotor saat puasa termasuk menjaga...", opsi: ["Rukun puasa", "Adab/kesempurnaan pahala puasa", "Syarat sah puasa", "Syarat wajib puasa"], kunci: 1 },
+        { tipe: 'pg', tanya: "Perang besar yang terjadi pada bulan Ramadhan di zaman Nabi adalah...", opsi: ["Perang Badar", "Perang Uhud", "Perang Khandaq", "Perang Khaibar"], kunci: 0 },
+        { tipe: 'pg', tanya: "Ahlul Rayyan adalah sebutan bagi pintu surga yang dikhususkan untuk...", opsi: ["Orang yang rajin shalat", "Orang yang rajin puasa", "Orang yang berjihad", "Orang yang berbakti pada orang tua"], kunci: 1 },
+        { tipe: 'pg', tanya: "Mengakhirkan makan sahur hukumnya...", opsi: ["Makruh", "Sunnah", "Haram", "Wajib"], kunci: 1 },
+        { tipe: 'pg', tanya: "Berbohong, menggunjing, dan memfitnah saat puasa dapat mengakibatkan...", opsi: ["Puasa batal seketika", "Pahala puasa hilang/berkurang", "Harus mengulang puasa", "Badan menjadi gatal"], kunci: 1 },
+        { tipe: 'pg', tanya: "Hari raya umat Islam setelah melaksanakan puasa Ramadhan sebulan penuh adalah...", opsi: ["Idul Adha", "Tahun Baru Hijriah", "Idul Fitri", "Hari Tasyrik"], kunci: 2 },
+        { tipe: 'pg', tanya: "Kalimat takbir yang dikumandangkan di malam hari raya disebut...", opsi: ["Tahmid", "Takbiran", "Tahlilan", "Tasbih"], kunci: 1 },
+        { tipe: 'pg', tanya: "Memperbanyak sedekah di bulan Ramadhan akan dilipatgandakan pahalanya oleh...", opsi: ["Malaikat", "Manusia", "Allah SWT", "Pemerintah"], kunci: 2 },
+        // ISIAN
+        { tipe: 'isian', tanya: "Arti puasa secara bahasa (bahasa Arab) adalah Siyam atau Saum yang berarti..." },
+        { tipe: 'isian', tanya: "Puasa Ramadhan hukumnya Fardu 'Ain, artinya..." },
+        { tipe: 'isian', tanya: "Doa berbuka puasa dibaca ketika waktu shalat ________ tiba." },
+        { tipe: 'isian', tanya: "Sebutkan salah satu hal yang membatalkan pahala puasa (bukan membatalkan puasanya)!" },
+        { tipe: 'isian', tanya: "Orang yang mengeluarkan zakat disebut dengan istilah..." },
+        { tipe: 'isian', tanya: "Sebutkan 2 macam rukun puasa!" },
+        { tipe: 'isian', tanya: "Nuzulul Qur'an biasanya diperingati setiap tanggal ________ Ramadhan." },
+        { tipe: 'isian', tanya: "Ibu hamil atau menyusui yang khawatir akan kesehatan anaknya boleh tidak puasa, tetapi wajib membayar..." },
+        { tipe: 'isian', tanya: "Shalat Idul Fitri dilaksanakan sebanyak ________ rakaat." },
+        { tipe: 'isian', tanya: "Tujuan kita membayar zakat fitrah bagi jiwa kita adalah untuk..." }
+    ];
+
+    let jawabanSiswa = {};
+    let currentIndex = 0;
+    let waktu = 3600;
+    let timerId;
+
+    function mulaiUjian() {
+        if(!document.getElementById('nama').value || !document.getElementById('kelas').value) return alert("Isi Nama & Kelas!");
+        document.getElementById('info-nama').innerText = document.getElementById('nama').value;
+        document.getElementById('info-kelas').innerText = document.getElementById('kelas').value;
+        document.getElementById('screen-login').classList.add('hidden');
+        document.getElementById('screen-quiz').classList.remove('hidden');
+        renderNav();
+        tampilSoal(0);
+        timerId = setInterval(() => {
+            waktu--;
+            let m = Math.floor(waktu/60), s = waktu%60;
+            document.getElementById('timer').innerText = `${m}:${s<10?'0'+s:s}`;
+            if(waktu<=0) selesai();
+        }, 1000);
+    }
+
+    function renderNav() {
+        const grid = document.getElementById('nav-grid'); grid.innerHTML = '';
+        soalData.forEach((_, i) => {
+            const btn = document.createElement('button');
+            btn.innerText = i + 1; btn.id = `nav-${i}`;
+            btn.className = `nav-btn ${jawabanSiswa[i] !== undefined ? 'answered' : ''}`;
+            btn.onclick = () => tampilSoal(i);
+            grid.appendChild(btn);
+        });
+    }
+
+    function tampilSoal(idx) {
+        currentIndex = idx;
+        const s = soalData[idx];
+        let html = `<h4>Soal ${idx+1}</h4><p>${s.tanya}</p>`;
+        if(s.tipe === 'pg') {
+            html += s.opsi.map((o, i) => `
+                <label class="option-item">
+                    <input type="radio" name="q" value="${i}" ${jawabanSiswa[idx] == i ? 'checked' : ''} onchange="simpan(${i})"> ${String.fromCharCode(65+i)}. ${o}
+                </label>`).join('');
+        } else {
+            html += `<textarea oninput="simpan(this.value)" placeholder="Jawaban singkat...">${jawabanSiswa[idx] || ''}</textarea>`;
+        }
+        document.getElementById('q-content').innerHTML = html;
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`nav-${idx}`).classList.add('active');
+    }
+
+    function simpan(val) {
+        jawabanSiswa[currentIndex] = val;
+        document.getElementById(`nav-${currentIndex}`).classList.add('answered');
+    }
+
+    function ubahSoal(n) {
+        let baru = currentIndex + n;
+        if(baru >= 0 && baru < soalData.length) tampilSoal(baru);
+    }
+
+    function konfirmasiSelesai() {
+        if(confirm("Yakin ingin mengirim jawaban?")) selesai();
+    }
+
+    function selesai() {
+        clearInterval(timerId);
+        let benar = 0;
+        soalData.forEach((s, i) => {
+            if(s.tipe === 'pg' && jawabanSiswa[i] == s.kunci) benar++;
+            if(s.tipe === 'isian' && jawabanSiswa[i]) benar++; 
+        });
+        const skor = benar * 2;
+        document.getElementById('screen-quiz').classList.add('hidden');
+        document.getElementById('screen-result').classList.remove('hidden');
+        document.getElementById('score-val').innerText = skor;
+        document.getElementById('score-det').innerText = `Benar: ${benar} dari 50 soal.`;
+
+        // Kirim ke Spreadsheet
+        const payload = { 
+            nama: document.getElementById('nama').value, 
+            kelas: document.getElementById('kelas').value, 
+            skor: skor, 
+            benar: benar 
+        };
+        fetch(URL_SPREADSHEET, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) })
+        .then(() => document.getElementById('status-kirim').innerText = "✅ Berhasil Terkirim!")
+        .catch(() => document.getElementById('status-kirim').innerText = "❌ Gagal Kirim Otomatis.");
+    }
+
+    function unduhExcel() {
+        const data = [["Nama", "Kelas", "Skor"], [document.getElementById('nama').value, document.getElementById('kelas').value, document.getElementById('score-val').innerText]];
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Hasil");
+        XLSX.writeFile(wb, `Tugas_Ramadhan_${document.getElementById('nama').value}.xlsx`);
+    }
+
+    function aksesAdmin() {
+        const pw = prompt("Masukkan Kata Sandi Admin:");
+        if(pw === "admin002") {
+            window.open(URL_VIEW_SHEET, '_blank');
+        } else {
+            alert("Sandi Salah!");
+        }
+    }
+</script>
+</body>
+</html>
